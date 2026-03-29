@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue *)",
+      "Bash(gh label *)",
+      "Bash(gh api repos/*/milestones*)",
+      "Bash(gh repo view*)",
+      "Bash(gh auth status*)"
+    ]
+  },
+  "env": {
+    "GITHUB_PLANNER_ENABLED": "1"
+  }
+}

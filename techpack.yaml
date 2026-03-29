@@ -1,0 +1,135 @@
+schemaVersion: 1
+identifier: github-planner
+displayName: GitHub Planner
+description: >-
+  Extracts tasks from planning documents (refactoring plans, epics, specs, migration plans)
+  and creates GitHub Issues with labels, milestones, and checklists.
+  Supports dry-run preview before creating issues.
+author: anettodev
+minMCSVersion: "2026.3.0"
+
+# ---------------------------------------------------------------------------
+# Prompts — resolved interactively during `mcs configure`
+# ---------------------------------------------------------------------------
+prompts:
+  - key: GITHUB_REPO
+    type: input
+    label: "GitHub repository (owner/repo format):"
+    default: __REPO_NAME__
+
+  - key: LABEL_PREFIX
+    type: input
+    label: "Prefix for auto-created labels (empty for none):"
+    default: ""
+
+  - key: DEFAULT_ASSIGNEE
+    type: input
+    label: "Default issue assignee (GitHub username, empty to skip):"
+    default: ""
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+components:
+  # ── Dependencies ────────────────────────────────────────────────────────
+  - id: gh
+    displayName: GitHub CLI
+    description: GitHub CLI for issue, label, and milestone management
+    brew: gh
+    doctorChecks:
+      - type: commandExists
+        name: GitHub CLI
+        section: Dependencies
+        command: gh
+
+  - id: jq
+    description: JSON processor (used by session hook)
+    brew: jq
+
+  # ── Issue Templates ────────────────────────────────────────────────────
+  - id: issue-templates
+    displayName: Issue Templates
+    description: >-
+      6 issue body templates (refactoring, cleanup, migration, bug, feature, decomposition).
+      Agent selects the matching template based on task type.
+    template:
+      source: templates/issues
+      destination: issue-templates
+
+  # ── Skill: plan-to-issues ──────────────────────────────────────────────
+  - id: plan-to-issues
+    description: >-
+      Parses planning documents and extracts actionable tasks.
+      Maps priorities, phases, and dependencies to GitHub labels and milestones.
+    dependencies: [issue-templates]
+    skill:
+      source: skills/plan-to-issues
+      destination: plan-to-issues
+
+  # ── Agent: github-planner ──────────────────────────────────────────────
+  - id: github-planner-agent
+    description: Creates GitHub Issues from extracted tasks using gh CLI
+    dependencies: [gh]
+    agent:
+      source: agents/github-planner.md
+      destination: github-planner.md
+
+  # ── Command: /plan-issues ──────────────────────────────────────────────
+  - id: plan-issues
+    description: "Parse a document and create GitHub Issues with /plan-issues <path>"
+    dependencies: [gh, plan-to-issues, github-planner-agent]
+    command:
+      source: commands/plan-issues.md
+      destination: plan-issues.md
+
+  # ── Command: /plan-preview ─────────────────────────────────────────────
+  - id: plan-preview
+    description: "Preview issues that would be created (dry run) with /plan-preview <path>"
+    dependencies: [plan-to-issues]
+    command:
+      source: commands/plan-preview.md
+      destination: plan-preview.md
+
+  # ── Hook: session start — verify gh auth ───────────────────────────────
+  - id: gh-auth-check
+    displayName: GitHub auth check
+    description: Verifies GitHub CLI authentication and reports repo context on session start
+    dependencies: [gh, jq]
+    hookEvent: SessionStart
+    hookTimeout: 10
+    hook:
+      source: hooks/gh-auth-check.sh
+      destination: github-planner/gh-auth-check.sh
+
+  # ── Settings ───────────────────────────────────────────────────────────
+  - id: settings
+    displayName: Settings
+    description: Permissions for gh CLI commands
+    isRequired: true
+    settingsFile: config/settings.json
+
+  # ── Gitignore ──────────────────────────────────────────────────────────
+  - id: gitignore
+    isRequired: true
+    gitignore:
+      - .github-planner-cache
+
+# ---------------------------------------------------------------------------
+# Templates — CLAUDE.local.md sections
+# ---------------------------------------------------------------------------
+templates:
+  - sectionIdentifier: github-planner
+    placeholders:
+      - __GITHUB_REPO__
+      - __LABEL_PREFIX__
+      - __DEFAULT_ASSIGNEE__
+    contentFile: templates/instructions.md
+
+# ---------------------------------------------------------------------------
+# Supplementary doctor checks
+# ---------------------------------------------------------------------------
+supplementaryDoctorChecks:
+  - type: commandExists
+    name: GitHub CLI authenticated
+    section: Authentication
+    command: gh auth status
