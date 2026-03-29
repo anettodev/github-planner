@@ -5,7 +5,9 @@
       "Bash(gh label *)",
       "Bash(gh api repos/*/milestones*)",
       "Bash(gh repo view*)",
-      "Bash(gh auth status*)"
+      "Bash(gh auth status*)",
+      "Bash(gh project *)",
+      "Bash(gh api graphql*)"
     ]
   },
   "env": {

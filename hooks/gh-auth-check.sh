@@ -47,6 +47,12 @@ main() {
         if ms_count=$(gh api repos/${repo}/milestones --method GET -f state=open 2>/dev/null | jq 'length'); then
             context+="\nOpen milestones: ${ms_count}"
         fi
+
+        # Projects
+        local owner="${repo%%/*}"
+        if proj_count=$(gh project list --owner "${owner}" --format json 2>/dev/null | jq '.projects | length'); then
+            context+="\nOpen projects: ${proj_count}"
+        fi
     else
         context+="\nRepo: not detected (not in a git repo or no remote)"
     fi

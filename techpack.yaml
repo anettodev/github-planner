@@ -2,9 +2,9 @@ schemaVersion: 1
 identifier: github-planner
 displayName: GitHub Planner
 description: >-
-  Extracts tasks from planning documents (refactoring plans, epics, specs, migration plans)
-  and creates GitHub Issues with labels, milestones, and checklists.
-  Supports dry-run preview before creating issues.
+  Project management toolkit for GitHub. Creates issues from planning documents,
+  organizes epics as GitHub Projects (v2), and triages backlogs with PM-level insights
+  on priority, UX impact, and project health.
 author: anettodev
 minMCSVersion: "2026.3.0"
 
@@ -79,6 +79,58 @@ components:
     command:
       source: commands/plan-preview.md
       destination: plan-preview.md
+
+  # ── Skill: epic-to-project ──────────────────────────────────────────────
+  - id: epic-to-project
+    description: >-
+      Parses planning documents and extracts project-level structure.
+      Maps phases and priorities to GitHub Project v2 custom fields.
+      Defines standard field schemas for Priority, Phase, and Status.
+    skill:
+      source: skills/epic-to-project
+      destination: epic-to-project
+
+  # ── Skill: issue-triage ────────────────────────────────────────────────
+  - id: issue-triage-skill
+    description: >-
+      Analyzes open GitHub issues for organization problems.
+      Evaluates priorities, UX impact, staleness, duplicates, and backlog health.
+      Produces PM-level insights and actionable recommendations.
+    skill:
+      source: skills/issue-triage
+      destination: issue-triage
+
+  # ── Agent: github-project-manager ──────────────────────────────────────
+  - id: github-project-manager-agent
+    description: Creates and configures GitHub Projects (v2), links issues, and sets custom field values
+    dependencies: [gh]
+    agent:
+      source: agents/github-project-manager.md
+      destination: github-project-manager.md
+
+  # ── Agent: issue-analyst ───────────────────────────────────────────────
+  - id: issue-analyst-agent
+    description: Fetches and analyzes open GitHub issues for triage. Read-only by default.
+    dependencies: [gh]
+    agent:
+      source: agents/issue-analyst.md
+      destination: issue-analyst.md
+
+  # ── Command: /plan-epic ────────────────────────────────────────────────
+  - id: plan-epic
+    description: "Create a GitHub Project (v2) from a planning document with /plan-epic <path>"
+    dependencies: [gh, epic-to-project, github-project-manager-agent, plan-to-issues, github-planner-agent]
+    command:
+      source: commands/plan-epic.md
+      destination: plan-epic.md
+
+  # ── Command: /issue-triage ─────────────────────────────────────────────
+  - id: issue-triage
+    description: "Scan and triage open issues with /issue-triage"
+    dependencies: [gh, issue-triage-skill, issue-analyst-agent, github-planner-agent]
+    command:
+      source: commands/issue-triage.md
+      destination: issue-triage.md
 
   # ── Hook: session start — verify gh auth ───────────────────────────────
   - id: gh-auth-check

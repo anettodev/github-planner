@@ -1,8 +1,6 @@
 # GitHub Planner
 
-MCS techpack that turns planning documents into GitHub Issues — with labels, milestones, checklists, and dependency tracking.
-
-Feed it a refactoring plan, migration spec, epic, or tech debt inventory. It extracts every task, maps priorities and phases, and creates issues in the right order so `#N` references resolve correctly.
+MCS techpack for GitHub project management. Creates issues from planning documents, organizes epics as GitHub Projects (v2), and triages backlogs with PM-level insights on priority, UX impact, and project health.
 
 ## Install
 
@@ -21,41 +19,91 @@ During setup you'll be prompted for:
 
 ### Prerequisites
 
-- [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated with `repo` scope
+- [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated with `repo` and `project` scopes
 - [jq](https://jqlang.github.io/jq/) — used by the session hook
 
 Both are installed automatically via Homebrew if missing.
 
-## Usage
+## Commands
 
-### Preview first (dry run)
+### `/plan-preview <path>` — Preview issues (dry run)
 
 ```
 /plan-preview path/to/plan.md
 ```
 
-Shows every issue that would be created — title, labels, milestone, risk, body preview — without touching GitHub. Also flags issues in your document (vague tasks, oversized checklists, missing file paths).
+Shows every issue that would be created — title, labels, milestone, risk, body preview — without touching GitHub. Flags problems in your document (vague tasks, oversized checklists, missing file paths).
 
-### Create issues
+### `/plan-issues <path>` — Create issues
 
 ```
 /plan-issues path/to/plan.md
 ```
 
-Parses the document, presents the full plan for approval, then creates everything:
-
+Parses the document, presents the full plan for approval, then creates:
 1. **Labels** — auto-created with a standard color scheme if they don't exist
 2. **Milestones** — one per phase or priority group
 3. **Issues** — created in execution order with dependency references
-
-You'll always be asked to confirm before anything is created.
-
-#### Flags
 
 | Flag | Description |
 |---|---|
 | `--repo owner/repo` | Override target repository |
 | `--dry-run` | Same as `/plan-preview` |
+
+### `/plan-epic <path>` — Create project board
+
+```
+/plan-epic path/to/plan.md
+```
+
+Creates a GitHub Project (v2) from a planning document with custom fields:
+- **Priority**: Critical, High, Medium, Low
+- **Phase**: Extracted from document sections
+- **Status**: Backlog, Todo, In Progress, In Review, Done
+
+Links all issues to the project and sets field values. Creates missing issues automatically.
+
+| Flag | Description |
+|---|---|
+| `--repo owner/repo` | Override target repository |
+| `--link-only #1 #2 #3` | Link existing issues to a project (no document needed) |
+| `--project-number N` | Link to an existing project instead of creating new |
+
+### `/issue-triage` — Backlog triage and health check
+
+```
+/issue-triage
+```
+
+Scans all open issues and produces a PM-level triage report:
+
+- **Backlog composition** — bugs vs features vs refactoring, with decision tips
+- **Priority re-evaluation** — flags mismatches (low-priority crashes, stale high-priority items)
+- **UX impact assessment** — scores issues by user-facing impact, suggests UX health sprints
+- **Staleness detection** — flags issues with no activity (30/60/120+ days)
+- **Duplicate detection** — groups similar issues by title and labels
+- **Oversized issues** — flags items with 8+ checklist items, suggests splits
+- **Epic suggestions** — identifies natural groupings for project boards
+- **Project health dashboard** — composition, age distribution, assignment coverage, UX score
+- **Recommended actions** — prioritized list of what the PM should do next
+
+Read-only by default. Use `--apply` to interactively approve and execute suggestions.
+
+| Flag | Description |
+|---|---|
+| `--repo owner/repo` | Override target repository |
+| `--apply` | Enable interactive mode to apply suggestions |
+| `--scope labels,priorities,...` | Limit analysis to specific categories |
+| `--since 30d` | Only analyze issues updated in the last N days |
+
+## Typical workflow
+
+```
+/plan-preview plan.md          # 1. Review what would be created
+/plan-issues plan.md           # 2. Create the issues
+/plan-epic plan.md             # 3. Organize into a project board
+/issue-triage                  # 4. Periodic backlog health check
+```
 
 ## Supported document types
 
@@ -108,17 +156,28 @@ Each template includes Summary, Tasks (checklist), Files Affected, Acceptance Cr
 
 ```
 github-planner/
-  agents/github-planner.md          # Agent that creates issues via gh CLI
+  agents/
+    github-planner.md              # Creates issues via gh CLI
+    github-project-manager.md      # Creates/configures GitHub Projects v2
+    issue-analyst.md               # Analyzes issues for triage (read-only)
   commands/
-    plan-issues.md                   # /plan-issues command
-    plan-preview.md                  # /plan-preview command
-  skills/plan-to-issues/
-    SKILL.md                         # Task extraction and label mapping logic
-    references/                      # Issue body templates (4 types)
-  templates/instructions.md          # CLAUDE.local.md instructions
-  hooks/gh-auth-check.sh             # Session hook — verifies gh auth on start
-  config/settings.json               # Permission allowlist for gh commands
-  techpack.yaml                      # Pack manifest
+    plan-issues.md                 # /plan-issues command
+    plan-preview.md                # /plan-preview command
+    plan-epic.md                   # /plan-epic command
+    issue-triage.md                # /issue-triage command
+  skills/
+    plan-to-issues/                # Task extraction and label mapping
+    epic-to-project/               # Project structure and custom fields
+    issue-triage/                  # Triage rules and PM dashboard
+  templates/
+    instructions.md                # CLAUDE.local.md instructions
+    issues/                        # Issue body templates (4 types)
+    projects/                      # Project description template
+  hooks/
+    gh-auth-check.sh               # Session hook — verifies gh auth on start
+    gh-auth-check-doctor.sh        # Doctor check script
+  config/settings.json             # Permission allowlist for gh commands
+  techpack.yaml                    # Pack manifest
 ```
 
 ## License
