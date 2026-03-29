@@ -7,7 +7,8 @@ Feed it a refactoring plan, migration spec, epic, or tech debt inventory. It ext
 ## Install
 
 ```bash
-mcs install github-planner
+mcs pack add anettodev/github-planner
+mcs sync
 ```
 
 During setup you'll be prompted for:
