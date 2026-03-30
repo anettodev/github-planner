@@ -1,8 +1,52 @@
-# GitHub Planner
+<div align="center">
 
-MCS techpack for GitHub project management. Creates issues from planning documents, organizes epics as GitHub Projects (v2), triages backlogs, tracks delivery progress, provides developer workload insights, and manages team knowledge through structured GitHub Discussions.
+<picture>
+  <img src="assets/logo.png" width="180" alt="GitHub Planner Logo" />
+</picture>
 
-## Quick Reference
+### Your GitHub Project — planned, tracked, and healthy.
+
+
+[![MCS](https://img.shields.io/badge/MCS-Tech_Pack-8B5CF6.svg)](https://mcs-cli.dev)
+[![GitHub CLI](https://img.shields.io/badge/GitHub_CLI-required-000000.svg?logo=github&logoColor=white)](https://cli.github.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+</div>
+
+## 🔥 The Problem
+
+I'm a software engineer who became an Engineering Manager. That shift can take you to an unfamiliar and uncomfortable place.
+
+As a developer, the loop is clear: pick an issue, implement it, move the card on the board, get a code review, merge — **done and next task**.
+
+As a manager, you handle that same loop **across an entire team** — multiplied by people, priorities, and **politics** (!).
+
+You lose your focus time and your success metrics become intangible. This [transition is one of the hardest in tech](https://stackoverflow.blog/2022/02/23/what-you-give-up-when-moving-into-engineering-management/) where [nearly 60% of tech employees experience imposter syndrome](https://www.allstacks.com/blog/overcome-imposter-syndrome-software-engineering), hitting hardest when you're [leading engineers who are deeper technical experts than you](https://peterszasz.com/managing-impostor-syndrome-as-a-new-engineering-manager/).
+
+As [Camille Fournier](https://www.linkedin.com/in/camille-fournier-9011812/) writes in [The Manager's Path](https://www.oreilly.com/library/view/the-managers-path/9781491973882/), each leadership step requires **letting go of what made you successful before** (but ["Old Habits Die Hard"](https://open.spotify.com/track/2v5f1poqSuqkNzHOQD4Ej7)) — and [64% of engineers who leave](https://jellyfish.co/blog/manager-to-engineer-ratio/) had managers stretched too thin to support them.
+
+The operational overhead — tracking delivery, triaging backlogs, balancing workloads, spotting stale work — eats the time you should spend better.
+
+- **Planning docs sit idle** — tasks never become trackable issues
+- **Backlogs rot silently** — stale issues, mismatched priorities, no one triages
+- **No delivery visibility** — "are we on track?" requires manual spreadsheet work
+- **Team health is invisible** — overloaded developers aren't flagged until burnout
+- **Decisions live in Slack** — no structured record, no searchable knowledge base
+- **CI failures block quietly** — broken workflows pile up unnoticed
+
+What if you had a swiss-knife tool to handle that side?
+
+## ✨ The Solution
+
+With the advent of [Claude Code](https://claude.com/product/claude-code), my good friend [Bruno Guidolim](https://github.com/bguidolim) created an amazing tool to help solve (in part) one of the biggest problems with agentic Engineering: **context rot** versus **effective context engineering** — the challenge of keeping AI agents grounded in the right information without losing coherence across long sessions.
+
+While [Karpathy's AutoResearch](https://github.com/karpathy/autoresearch) proves what needs to be done for agents to work effectively long-term, MCS solves the problem of how to distribute it on Claude Code.
+I invite you to try [MCS](https://mcs-cli.dev).
+
+**GitHub Planner** is an MCS techpack built on top of that foundation — it turns planning documents into a fully managed GitHub workflow (all through Claude Code slash commands).
+
+Issues, epics, triage, discussions, delivery metrics, CI health, and team workload analysis.
+
+#### Quick Reference
 
 ```
 /plan-preview plan.md                    # Preview issues (dry run)
@@ -21,7 +65,11 @@ MCS techpack for GitHub project management. Creates issues from planning documen
 /dev360-insights --dev @username         # Individual health report
 ```
 
-## Prerequisites
+---
+
+## 🚀 Install
+
+### Prerequisites
 
 - [MCS](https://mcs-cli.dev/) — Managed Claude Stack CLI, required to install and manage techpacks
 - [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated with `repo` and `project` scopes
@@ -29,11 +77,12 @@ MCS techpack for GitHub project management. Creates issues from planning documen
 
 GitHub CLI and jq are installed automatically via Homebrew if missing. MCS must be installed first.
 
-## Install
+### Setup
 
 ```bash
 mcs pack add anettodev/github-planner
 mcs sync
+mcs doctor    # verify everything
 ```
 
 During setup you'll be prompted for:
@@ -45,7 +94,10 @@ During setup you'll be prompted for:
 | `DEFAULT_ASSIGNEE` | Default issue assignee | _(none)_ |
 | `STALE_THRESHOLD` | Days before an issue is flagged as stale | `14` |
 
-## Commands
+
+---
+
+## 📋 Commands
 
 ### `/plan-preview <path>` — Preview issues (dry run)
 
@@ -159,7 +211,7 @@ Maintains a **Knowledge Manifest** at `docs/github-planner/KNOWLEDGE.md` — a v
 | `--repo owner/repo` | Override target repository |
 | `--type TYPE` | Skip type selection (decision, design, retro, postmortem, distribution, analysis) |
 
-> **Note**: Requires GitHub Discussions to be enabled in the repo. If disabled, the command will detect it and guide you to enable it (Settings > General > Features). All other commands (`/plan-issues`, `/plan-epic`, `/issue-triage`) work without Discussions enabled.
+> **Note**: Requires GitHub Discussions to be enabled in the repo. If disabled, the command will detect it and guide you to enable it (Settings > General > Features). All other commands work without Discussions enabled.
 
 ### `/plan-insights` — Project delivery metrics
 
@@ -229,29 +281,20 @@ Read-only — never modifies issues, PRs, or assignments. No leaderboards, no ra
 | `--dev @username` | Individual developer report |
 | `--period 30d` | Time window (default: 30 days) |
 
-## Typical workflow
+---
+
+## ⚙️ How It Works
 
 ```
-/plan-preview plan.md          # 1. Review what would be created
-/plan-issues plan.md           # 2. Create the issues
-/plan-epic plan.md             # 3. Organize into a project board
-/issue-triage                  # 4. Periodic backlog health check
-/plan-discussion               # 5. Document decisions, run retros, evaluate deps
-/plan-insights                 # 6. Track delivery progress and health
-/dev360-insights               # 7. Review team workload balance
+ Planning Doc        Claude Code       GitHub
+ (markdown)   -----> (commands)  -----> (Issues, Projects, Discussions)
+                         |
+                    .-----------.
+                    |           |
+                    v           v
+               Analysis     Actions
+              (read-only)  (with --apply)
 ```
-
-## Supported document types
-
-- Refactoring plans (phased, prioritized)
-- Migration plans
-- Epic documents with stories/tasks
-- Architecture decision records (ADRs)
-- Sprint planning documents
-- Technical debt inventories
-- Any structured markdown with tasks, phases, or action items
-
-## How it works
 
 ### Task extraction
 
@@ -275,20 +318,44 @@ Each phase, priority item, or numbered task becomes a GitHub Issue. Sub-steps be
 | Tests | `testing` |
 | Docs | `documentation` |
 
-### Issue templates
+### Severity scale
 
-Issues are generated from structured templates based on task type:
+Used consistently across all reports:
 
-| Template | Used for |
+| Indicator | Meaning |
 |---|---|
-| `refactoring.md` | Restructuring, migrations, file splits, consolidations |
-| `cleanup.md` | Dead code removal, deprecated files, unused dependencies |
-| `bug.md` | Bug fixes, error corrections, crash resolutions |
-| `feature.md` | New features, enhancements, new capabilities |
+| 🟢 | Healthy / On track |
+| 🟡 | Warning / At risk |
+| 🟠 | Stale / Degraded |
+| 🔴 | Critical / Behind |
 
-Each template includes Summary, Tasks (checklist), Files Affected, Acceptance Criteria, Dependencies, and Risk assessment.
+### Supported document types
 
-## What's included
+- Refactoring plans (phased, prioritized)
+- Migration plans
+- Epic documents with stories/tasks
+- Architecture decision records (ADRs)
+- Sprint planning documents
+- Technical debt inventories
+- Any structured markdown with tasks, phases, or action items
+
+---
+
+## 🔁 Typical Workflow
+
+```
+/plan-preview plan.md          # 1. Review what would be created
+/plan-issues plan.md           # 2. Create the issues
+/plan-epic plan.md             # 3. Organize into a project board
+/issue-triage                  # 4. Periodic backlog health check
+/plan-discussion               # 5. Document decisions, run retros, evaluate deps
+/plan-insights                 # 6. Track delivery progress and health
+/dev360-insights               # 7. Review team workload balance
+```
+
+---
+
+## 📦 What's Included
 
 ```
 github-planner/
@@ -316,8 +383,6 @@ github-planner/
     dev360-insights/               # Workload balance and team health
   templates/
     instructions.md                # CLAUDE.local.md instructions
-    issues/                        # Issue body templates (4 types)
-    projects/                      # Project description template
   hooks/
     gh-auth-check.sh               # Session hook — verifies gh auth on start
     gh-auth-check-doctor.sh        # Doctor check script
@@ -325,6 +390,18 @@ github-planner/
   techpack.yaml                    # Pack manifest
 ```
 
-## License
+---
 
-MIT
+## 🤝 Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for guidelines.
+
+We use a **fork-based workflow** — fork the repo, create a feature branch, and submit a PR.
+
+---
+
+<div align="center">
+
+**MIT License** · Made with ❤️ by [anettodev](https://github.com/anettodev)
+
+</div>
