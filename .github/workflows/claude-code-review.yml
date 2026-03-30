@@ -13,6 +13,8 @@ env:
   MAX_AUTO_REVIEW_FILES: 5
   MAX_AUTO_REVIEW_TOKENS: 15000
 
+permissions: {}
+
 jobs:
   claude-review:
     if: |
