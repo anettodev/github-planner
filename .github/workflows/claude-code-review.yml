@@ -125,16 +125,23 @@ jobs:
           LABEL="${{ github.event.label.name }}"
           SENDER="${{ github.event.sender.login }}"
 
-          if [[ "$ACTION" == "labeled" && "$LABEL" == "claude" ]]; then
-            # Verify the labeler has write/maintain/admin permission (CODEOWNERS enforcement)
+          # Check if the claude label is already on the PR (handles synchronize events
+          # after the label was previously added, not just the labeled event itself)
+          HAS_CLAUDE_LABEL=$(gh api \
+            repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels \
+            --jq '[.[].name] | contains(["claude"])' 2>/dev/null || echo "false")
+
+          if [[ "$ACTION" == "labeled" && "$LABEL" == "claude" ]] || \
+             [[ "$HAS_CLAUDE_LABEL" == "true" && "$ACTION" != "labeled" ]]; then
+            # Verify the PR author has write/maintain/admin permission (CODEOWNERS enforcement)
             PERMISSION=$(gh api repos/${{ github.repository }}/collaborators/${SENDER}/permission \
               --jq '.permission' 2>/dev/null || echo "none")
             if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "maintain" || "$PERMISSION" == "write" ]]; then
               echo "confirmed=true" >> "$GITHUB_OUTPUT"
-              echo "Label added by authorized user: ${SENDER} (${PERMISSION})"
+              echo "claude label present, authorized user: ${SENDER} (${PERMISSION})"
             else
               echo "confirmed=false" >> "$GITHUB_OUTPUT"
-              echo "::warning::Label 'claude' added by unauthorized user: ${SENDER} (${PERMISSION}) — review skipped"
+              echo "::warning::claude label present but user unauthorized: ${SENDER} (${PERMISSION}) — review skipped"
             fi
           elif [[ "$TOTAL_LINES" -gt "${{ env.MAX_AUTO_REVIEW_LINES }}" ]] || \
                [[ "$CHANGED_FILES" -gt "${{ env.MAX_AUTO_REVIEW_FILES }}" ]] || \
