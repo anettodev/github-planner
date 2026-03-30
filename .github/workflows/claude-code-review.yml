@@ -193,9 +193,9 @@ jobs:
         if: steps.build-check.outputs.status != 'failed' && steps.gate.outputs.confirmed == 'true'
         uses: anthropics/claude-code-action@v1
         with:
-          model: claude-sonnet-4-6
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: >-
+            --model claude-sonnet-4-6
             --allowed-tools
             "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),
             Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*)"
