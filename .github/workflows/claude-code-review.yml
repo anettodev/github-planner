@@ -1,0 +1,206 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened, labeled]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  MAX_AUTO_REVIEW_LINES: 150
+  MAX_AUTO_REVIEW_FILES: 5
+  MAX_AUTO_REVIEW_TOKENS: 15000
+
+jobs:
+  claude-review:
+    if: |
+      github.event.pull_request.user.login != 'claude[bot]' &&
+      github.event.pull_request.draft == false &&
+      (github.event.action != 'labeled' || github.event.label.name == 'claude') &&
+      contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+
+    runs-on: ubuntu-latest
+    environment: claude-review
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Wait for CI checks
+        id: build-check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA=${{ github.event.pull_request.head.sha }}
+          REQUIRED_CHECKS=("Static Analysis" "Lint Markdown" "Lint YAML")
+          MAX_WAIT=120
+          INTERVAL=15
+          INITIAL_DELAY=30
+
+          echo "Waiting ${INITIAL_DELAY}s for checks to register..."
+          sleep $INITIAL_DELAY
+
+          declare -A PENDING
+          for CHECK in "${REQUIRED_CHECKS[@]}"; do
+            PENDING["$CHECK"]=1
+          done
+
+          WAITED=0
+          FAILED=""
+
+          while [[ $WAITED -lt $MAX_WAIT && ${#PENDING[@]} -gt 0 ]]; do
+            for CHECK in "${!PENDING[@]}"; do
+              RESULT=$(gh api repos/${{ github.repository }}/commits/${SHA}/check-runs \
+                --jq ".check_runs[] | select(.name == \"${CHECK}\") | .conclusion" 2>/dev/null || echo "")
+              if [[ "$RESULT" == "success" ]]; then
+                echo "  ✓ ${CHECK} passed"
+                unset "PENDING[${CHECK}]"
+              elif [[ "$RESULT" == "failure" || "$RESULT" == "cancelled" ]]; then
+                echo "  ✗ ${CHECK} failed"
+                FAILED="${FAILED}${CHECK}, "
+                unset "PENDING[${CHECK}]"
+              fi
+            done
+            if [[ ${#PENDING[@]} -gt 0 ]]; then
+              echo "Waiting... (${WAITED}s / ${MAX_WAIT}s)"
+              sleep $INTERVAL
+              WAITED=$((WAITED + INTERVAL))
+            fi
+          done
+
+          if [[ -n "$FAILED" ]]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "failed_checks=${FAILED%, }" >> "$GITHUB_OUTPUT"
+          elif [[ ${#PENDING[@]} -gt 0 ]]; then
+            echo "status=timeout" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=success" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip review if CI failed
+        if: steps.build-check.outputs.status == 'failed'
+        run: |
+          echo "::error::Skipping Claude review — CI failed: ${{ steps.build-check.outputs.failed_checks }}"
+          exit 1
+
+      - name: Check PR size
+        if: steps.build-check.outputs.status != 'failed'
+        id: size
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} \
+            --jq '{additions, deletions, changed_files}')
+          ADDITIONS=$(echo "$PR_DATA" | jq '.additions')
+          DELETIONS=$(echo "$PR_DATA" | jq '.deletions')
+          CHANGED_FILES=$(echo "$PR_DATA" | jq '.changed_files')
+          TOTAL_LINES=$((ADDITIONS + DELETIONS))
+          EST_TOKENS=$(( (TOTAL_LINES * 35 / 10) + 2000 ))
+          EST_COST_CENTS=$(( EST_TOKENS * 25 / 1000 ))
+          EST_COST="$(( EST_COST_CENTS / 100 )).$(printf '%02d' $(( EST_COST_CENTS % 100 )))"
+
+          echo "additions=$ADDITIONS" >> "$GITHUB_OUTPUT"
+          echo "deletions=$DELETIONS" >> "$GITHUB_OUTPUT"
+          echo "changed_files=$CHANGED_FILES" >> "$GITHUB_OUTPUT"
+          echo "total_lines=$TOTAL_LINES" >> "$GITHUB_OUTPUT"
+          echo "est_tokens=$EST_TOKENS" >> "$GITHUB_OUTPUT"
+          echo "est_cost=$EST_COST" >> "$GITHUB_OUTPUT"
+
+      - name: Check if review is confirmed
+        if: steps.build-check.outputs.status != 'failed'
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TOTAL_LINES=${{ steps.size.outputs.total_lines }}
+          CHANGED_FILES=${{ steps.size.outputs.changed_files }}
+          EST_TOKENS=${{ steps.size.outputs.est_tokens }}
+          ACTION="${{ github.event.action }}"
+          LABEL="${{ github.event.label.name }}"
+          SENDER="${{ github.event.sender.login }}"
+
+          if [[ "$ACTION" == "labeled" && "$LABEL" == "claude" ]]; then
+            # Verify the labeler has write/maintain/admin permission (CODEOWNERS enforcement)
+            PERMISSION=$(gh api repos/${{ github.repository }}/collaborators/${SENDER}/permission \
+              --jq '.permission' 2>/dev/null || echo "none")
+            if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "maintain" || "$PERMISSION" == "write" ]]; then
+              echo "confirmed=true" >> "$GITHUB_OUTPUT"
+              echo "Label added by authorized user: ${SENDER} (${PERMISSION})"
+            else
+              echo "confirmed=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Label 'claude' added by unauthorized user: ${SENDER} (${PERMISSION}) — review skipped"
+            fi
+          elif [[ "$TOTAL_LINES" -gt "${{ env.MAX_AUTO_REVIEW_LINES }}" ]] || \
+               [[ "$CHANGED_FILES" -gt "${{ env.MAX_AUTO_REVIEW_FILES }}" ]] || \
+               [[ "$EST_TOKENS" -gt "${{ env.MAX_AUTO_REVIEW_TOKENS }}" ]]; then
+            echo "confirmed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "confirmed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for existing size warning
+        if: steps.build-check.outputs.status != 'failed' && steps.gate.outputs.confirmed == 'false'
+        id: existing-warning
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          EXISTING=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains("PR too large for auto-review")))] | length')
+          echo "count=$EXISTING" >> "$GITHUB_OUTPUT"
+
+      - name: Post size warning
+        if: steps.build-check.outputs.status != 'failed' && steps.gate.outputs.confirmed == 'false' && steps.existing-warning.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --repo ${{ github.repository }} \
+            --body "**Claude Code Review** — PR too large for auto-review
+
+          | Metric | Value |
+          |--------|-------|
+          | Changed files | ${{ steps.size.outputs.changed_files }} |
+          | Lines changed | +${{ steps.size.outputs.additions }} / -${{ steps.size.outputs.deletions }} (${{ steps.size.outputs.total_lines }} total) |
+          | Est. tokens | ~${{ steps.size.outputs.est_tokens }} |
+          | Est. cost | ~\$${{ steps.size.outputs.est_cost }} |
+
+          Add the \`claude\` label to this PR to trigger the review."
+
+      - name: Checkout repository
+        if: steps.build-check.outputs.status != 'failed' && steps.gate.outputs.confirmed == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        if: steps.build-check.outputs.status != 'failed' && steps.gate.outputs.confirmed == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          model: claude-sonnet-4-6
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*)"'
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Review this pull request using the repository's CLAUDE.md for conventions.
+            This is a GitHub automation and planning toolset (shell scripts, markdown, YAML config).
+
+            Focus on:
+            - Shell script bugs: unquoted variables, missing error handling, unsafe commands
+            - YAML/config errors: invalid structure, missing required fields, bad references
+            - Markdown issues: broken links, malformed templates, missing required sections
+            - Security: command injection in shell scripts, hardcoded secrets or tokens
+            - Logic errors: incorrect conditionals, wrong gh CLI flags, broken workflows
+
+            Do NOT comment on:
+            - Code style or formatting (handled by linters)
+            - Missing comments or documentation
+            - Minor whitespace issues
+
+            Be concise. Only comment on real issues. If the PR looks good, say so briefly.
+            Use `gh pr diff` to read the changes, then `gh pr comment` to post your review.
