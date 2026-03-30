@@ -229,7 +229,7 @@ components:
     displayName: Settings
     description: Permissions for gh CLI commands
     isRequired: true
-    settingsFile: config/settings.json
+    settingsFile: src/config/settings.json
 
   # ── Gitignore ──────────────────────────────────────────────────────────
   - id: gitignore
@@ -247,7 +247,7 @@ templates:
       - __GITHUB_REPO__
       - __LABEL_PREFIX__
       - __DEFAULT_ASSIGNEE__
-    contentFile: templates/instructions.md
+    contentFile: src/templates/instructions.md
 
 # ---------------------------------------------------------------------------
 # Supplementary doctor checks
