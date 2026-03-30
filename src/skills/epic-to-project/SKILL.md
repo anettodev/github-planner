@@ -7,7 +7,7 @@ You are an expert at structuring GitHub Projects (v2) from planning documents. Y
 This skill works alongside `plan-to-issues` (which extracts individual issues). You extract the **project-level structure**:
 
 - **Project title and description** from the document heading or epic name
-- **Phases** from document sections → become a custom field + board views
+- **Phases** from document sections → become a GitHub Milestone AND a Phase custom field on the board
 - **Priority levels** from task signals → become a custom field
 - **Issue groupings** with their field value assignments
 
@@ -29,15 +29,40 @@ Values are extracted dynamically from the document. Examples:
 - "Sprint 3" → field value `Sprint 3`
 - "Milestone: Auth Overhaul" → field value `Auth Overhaul`
 
+Each Phase value also maps to a **GitHub Milestone** of the same name (see Milestone Handling below).
+
 ### Status (Single Select)
-Standard kanban values (always the same):
-| Value | Color |
-|---|---|
-| Backlog | `#E8E8E8` (gray) |
-| Todo | `#0075CA` (blue) |
-| In Progress | `#FBCA04` (yellow) |
-| In Review | `#5319E7` (purple) |
-| Done | `#0E8A16` (green) |
+Standard kanban values (always the same). GitHub Projects creates Todo/In Progress/Done by default — always extend with In Review:
+| Value | Color | Notes |
+|---|---|---|
+| Todo | `#0075CA` (blue) | Default GitHub option |
+| In Progress | `#FBCA04` (yellow) | Default GitHub option |
+| In Review | `#5319E7` (purple) | Must be added via `updateProjectV2Field` |
+| Done | `#0E8A16` (green) | Default GitHub option |
+
+## Milestone Handling
+
+Every Phase in the document corresponds to a GitHub Milestone. The agent must:
+
+1. **List existing milestones** before creating any:
+   ```bash
+   gh milestone list --repo OWNER/REPO --state open --json number,title
+   ```
+2. **Match by title** (case-insensitive, trimmed). If a milestone with the same name already exists, reuse it — do not create a duplicate.
+3. **Create only if missing**:
+   ```bash
+   gh api repos/OWNER/REPO/milestones \
+     --method POST \
+     --field title="Phase 1" \
+     --field description="Phase 1 from epic: EPIC_TITLE"
+   ```
+4. **Assign the milestone to each issue** when linking:
+   ```bash
+   gh issue edit N --milestone "Phase 1" --repo OWNER/REPO
+   ```
+5. **In link-only mode**: read the issue's existing milestone (if any) and map it to the Phase field — do not overwrite an existing milestone unless the user explicitly asks.
+
+The milestone title must exactly match the Phase field value so they stay in sync.
 
 ## Issue Resolution
 
@@ -81,19 +106,26 @@ Suggest default views based on document structure:
     {
       "name": "Status",
       "type": "SINGLE_SELECT",
-      "options": ["Backlog", "Todo", "In Progress", "In Review", "Done"]
+      "options": ["Todo", "In Progress", "In Review", "Done"]
     }
+  ],
+  "milestones": [
+    { "title": "Phase 1", "action": "reuse", "number": 2 },
+    { "title": "Phase 2", "action": "create" },
+    { "title": "Phase 3", "action": "create" }
   ],
   "items": [
     {
       "issueNumber": 45,
       "title": "Remove dead files",
-      "fields": { "Priority": "Critical", "Phase": "Phase 1", "Status": "Backlog" }
+      "milestone": "Phase 1",
+      "fields": { "Priority": "Critical", "Phase": "Phase 1", "Status": "Todo" }
     },
     {
       "issueNumber": null,
       "title": "Add caching layer",
-      "fields": { "Priority": "High", "Phase": "Phase 2", "Status": "Backlog" },
+      "milestone": "Phase 2",
+      "fields": { "Priority": "High", "Phase": "Phase 2", "Status": "Todo" },
       "needsCreation": true
     }
   ],
@@ -110,5 +142,5 @@ Label-to-field mapping for link-only mode:
 - `priority: high` → Priority = High
 - `priority: medium` → Priority = Medium
 - `priority: low` → Priority = Low
-- Milestone name → Phase = milestone name
-- All default to Status = Backlog
+- Milestone name → Phase = milestone name (do not overwrite existing milestone)
+- All default to Status = Todo

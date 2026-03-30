@@ -107,6 +107,38 @@ Map each type to a Discussion category. If the category doesn't exist, suggest c
 
 Note: GitHub Discussions categories must already exist — they can't be created via API. If the ideal category doesn't exist, use the closest match and suggest the user creates it in repo settings.
 
+## Label Attachment
+
+GitHub Discussions support labels. After creating a discussion, attach labels as follows:
+
+1. Run `gh label list` to get existing labels
+2. Auto-attach matching labels if they exist
+3. For any suggested label that doesn't exist, propose creating it (name + color) and wait for user approval before creating
+
+### Default label mapping per type
+
+| Type | Auto-attach if exists | Suggest creating if not |
+|---|---|---|
+| `design` | `enhancement`, `architecture` | `design` (#0075ca) |
+| `decision` | `architecture` | `decision` (#e4e669) |
+| `retro` | — | `retro` (#f9d0c4) |
+| `postmortem` | — | `postmortem` (#b60205) |
+| `distribution` | — | `distribution` (#0e8a16) |
+| `analysis` | — | `analysis` (#5319e7) |
+
+Use the GraphQL `addLabelsToLabelable` mutation to attach labels to discussions (REST label endpoints only work for issues).
+
+```bash
+gh api graphql -f query='mutation {
+  addLabelsToLabelable(input: {
+    labelableId: "DISCUSSION_NODE_ID"
+    labelIds: ["LABEL_NODE_ID"]
+  }) {
+    labelable { labels(first:5) { nodes { name } } }
+  }
+}'
+```
+
 ## Manifest Integration
 
 After creating a Discussion, the agent updates `docs/github-planner/KNOWLEDGE.md`:

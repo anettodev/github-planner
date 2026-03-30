@@ -50,6 +50,25 @@ gh project field-create PROJECT_NUMBER --owner OWNER \
   --single-select-options "Option1,Option2,Option3"
 ```
 
+**Important — Status field**: GitHub creates a default Status field (Todo, In Progress, Done). Always extend it with "In Review" between In Progress and Done using `updateProjectV2Field`:
+```bash
+gh api graphql -f query='
+mutation {
+  updateProjectV2Field(input: {
+    fieldId: "STATUS_FIELD_ID"
+    singleSelectOptions: [
+      {name: "Todo", color: GRAY, description: ""}
+      {name: "In Progress", color: BLUE, description: ""}
+      {name: "In Review", color: YELLOW, description: ""}
+      {name: "Done", color: GREEN, description: ""}
+    ]
+  }) {
+    projectV2Field { ... on ProjectV2SingleSelectField { id name options { id name } } }
+  }
+}'
+```
+Note: `updateProjectV2Field` takes only `fieldId` (no `projectId`).
+
 ### 3. Get Project Metadata
 
 Query field IDs and option IDs via GraphQL (needed to set values on items):
@@ -77,7 +96,26 @@ If this fails with a "user not found" error, retry with `organization(login: $ow
 
 Build a lookup map: `fieldName → fieldId` and `fieldName.optionName → optionId`.
 
-### 4. Link Issues to Project
+### 4. Resolve and Create Milestones
+
+For each Phase in the epic, check if a matching milestone already exists before creating:
+
+```bash
+gh milestone list --repo OWNER/REPO --state open --json number,title
+```
+
+- Match by title (case-insensitive). If found, record the number — **do not create a duplicate**.
+- If not found, create it:
+  ```bash
+  gh api repos/OWNER/REPO/milestones \
+    --method POST \
+    --field title="Phase 1" \
+    --field description="Phase 1 — EPIC_TITLE"
+  ```
+
+Build a lookup map: `phaseName → milestoneNumber`.
+
+### 5. Link Issues to Project
 
 For each issue, add it to the project:
 ```bash
@@ -87,9 +125,15 @@ gh project item-add PROJECT_NUMBER --owner OWNER \
 
 Parse the output to get the item ID. If the issue is already in the project, note the existing item ID.
 
-### 5. Set Field Values
+### 6. Set Field Values and Assign Milestones
 
-For each item, set its Priority, Phase, and Status values using GraphQL:
+For each item, assign its milestone first (this updates the issue directly):
+```bash
+gh issue edit N --milestone "Phase 1" --repo OWNER/REPO
+```
+Skip milestone assignment if the issue already has a milestone and `--link-only` mode is active.
+
+Then set its Priority, Phase, and Status values using GraphQL:
 ```bash
 gh api graphql -f query='
 mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
@@ -106,7 +150,7 @@ mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
 
 Repeat for each field (Priority, Phase, Status) on each item.
 
-### 6. Report Summary
+### 7. Report Summary
 
 Output a summary table:
 
@@ -114,20 +158,26 @@ Output a summary table:
 Project: "Epic Title" (#N)
 URL: https://github.com/orgs/OWNER/projects/N
 
-| Issue | Title                    | Priority | Phase   | Status  |
-|-------|--------------------------|----------|---------|---------|
-| #45   | Remove dead files        | Critical | Phase 1 | Backlog |
-| #46   | Update Project.swift     | High     | Phase 2 | Backlog |
+Milestones:
+  ✓ Phase 1 (reused #2)
+  ✓ Phase 2 (created #3)
 
-Total: N issues linked
-Custom fields: Priority (4 options), Phase (N options), Status (5 options)
+| Issue | Title                    | Priority | Phase   | Milestone | Status |
+|-------|--------------------------|----------|---------|-----------|--------|
+| #45   | Remove dead files        | Critical | Phase 1 | Phase 1   | Todo   |
+| #46   | Update Project.swift     | High     | Phase 2 | Phase 2   | Todo   |
+
+Total: N issues linked, M milestones resolved
+Custom fields: Priority (4 options), Phase (N options), Status (4 options)
 ```
 
 ## Safety Rules
 
 1. **Always confirm before creating** — present the full plan and wait for user approval
 2. **Never create duplicate projects** — search existing projects by title first
-3. **Verify all issue numbers exist** — run `gh issue view N` before linking
-4. **Rate limit awareness** — add brief delay between GraphQL mutations if > 15 items
-5. **Repository verification** — confirm repo and owner before ANY write operation
-6. **Try user, then org** — GraphQL queries differ for user-owned vs org-owned projects
+3. **Never create duplicate milestones** — always run `gh milestone list` and reuse by title match
+4. **Verify all issue numbers exist** — run `gh issue view N` before linking
+5. **Don't overwrite existing milestones in link-only mode** — only assign if the issue has none
+6. **Rate limit awareness** — add brief delay between GraphQL mutations if > 15 items
+7. **Repository verification** — confirm repo and owner before ANY write operation
+8. **Try user, then org** — GraphQL queries differ for user-owned vs org-owned projects

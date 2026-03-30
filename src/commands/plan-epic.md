@@ -57,16 +57,22 @@ Will create project "Epic: Auth Overhaul" in owner/repo:
 Custom fields:
   - Priority: Critical, High, Medium, Low
   - Phase: Phase 1, Phase 2, Phase 3
-  - Status: Backlog, Todo, In Progress, In Review, Done
+  - Status: Todo, In Progress, In Review, Done
 
-| # | Issue | Title                    | Priority | Phase   | Status  |
-|---|-------|--------------------------|----------|---------|---------|
-| 1 | #45   | Remove dead files        | Critical | Phase 1 | Backlog |
-| 2 | #46   | Update Project.swift     | High     | Phase 2 | Backlog |
-| 3 | NEW   | Add caching layer        | Medium   | Phase 3 | Backlog |
+Milestones:
+  - Phase 1 → reuse existing #2
+  - Phase 2 → create new
+  - Phase 3 → create new
+
+| # | Issue | Title                    | Priority | Phase   | Milestone | Status |
+|---|-------|--------------------------|----------|---------|-----------|--------|
+| 1 | #45   | Remove dead files        | Critical | Phase 1 | Phase 1   | Todo   |
+| 2 | #46   | Update Project.swift     | High     | Phase 2 | Phase 2   | Todo   |
+| 3 | NEW   | Add caching layer        | Medium   | Phase 3 | Phase 3   | Todo   |
 
 Issues to create first: 1
 Issues to link: 2
+Milestones to create: 2 · to reuse: 1
 
 Proceed? (yes/no)
 ```
