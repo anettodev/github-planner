@@ -164,18 +164,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr comment "${{ github.event.pull_request.number }}" \
-            --repo ${{ github.repository }} \
-            --body "**Claude Code Review** — PR too large for auto-review
+          LINES="+${{ steps.size.outputs.additions }} / \
+          -${{ steps.size.outputs.deletions }} \
+          (${{ steps.size.outputs.total_lines }} total)"
+          BODY="**Claude Code Review** — PR too large for auto-review
 
           | Metric | Value |
           |--------|-------|
           | Changed files | ${{ steps.size.outputs.changed_files }} |
-          | Lines changed | +${{ steps.size.outputs.additions }} / -${{ steps.size.outputs.deletions }} (${{ steps.size.outputs.total_lines }} total) |
+          | Lines changed | ${LINES} |
           | Est. tokens | ~${{ steps.size.outputs.est_tokens }} |
           | Est. cost | ~\$${{ steps.size.outputs.est_cost }} |
 
           Add the \`claude\` label to this PR to trigger the review."
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --repo ${{ github.repository }} \
+            --body "$BODY"
 
       - name: Checkout repository
         if: steps.build-check.outputs.status != 'failed' && steps.gate.outputs.confirmed == 'true'
