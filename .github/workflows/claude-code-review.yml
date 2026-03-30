@@ -148,12 +148,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          EXISTING=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
-            --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains("PR too large for auto-review")))] | length')
+          EXISTING=$(gh api \
+            repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '[.[] | select(
+              .user.login == "github-actions[bot]" and
+              (.body | contains("PR too large for auto-review"))
+            )] | length')
           echo "count=$EXISTING" >> "$GITHUB_OUTPUT"
 
       - name: Post size warning
-        if: steps.build-check.outputs.status != 'failed' && steps.gate.outputs.confirmed == 'false' && steps.existing-warning.outputs.count == '0'
+        if: |
+          steps.build-check.outputs.status != 'failed' &&
+          steps.gate.outputs.confirmed == 'false' &&
+          steps.existing-warning.outputs.count == '0'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -182,7 +189,10 @@ jobs:
         with:
           model: claude-sonnet-4-6
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*)"'
+          claude_args: >-
+            --allowed-tools
+            "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),
+            Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*)"
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}

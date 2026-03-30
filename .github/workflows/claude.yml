@@ -85,14 +85,17 @@ jobs:
           claude_args: |
             --model "claude-sonnet-4-6"
             --max-turns 50
-            --allowedTools "Bash(git:*),Bash(gh issue:*),Bash(gh pr:*),Bash(gh repo:*),Edit,Write,Read,Glob,Grep,LS,WebSearch,WebFetch"
+            --allowedTools "Bash(git:*),Bash(gh issue:*),Bash(gh pr:*),
+            Bash(gh repo:*),Edit,Write,Read,Glob,Grep,LS,WebSearch,WebFetch"
 
       - name: Clean up Claude comment
         if: github.event_name == 'issues'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments --jq '.[-1].id')
+          COMMENT_ID=$(gh api \
+            repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
+            --jq '.[-1].id')
           if [ -n "$COMMENT_ID" ]; then
             BODY=$(gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID --jq '.body')
             CLEANED=$(echo "$BODY" | sed 's/ • \[Create PR ➔\]([^)]*)//g' | sed 's/[[:space:]]*|[[:space:]]*$//')
