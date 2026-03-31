@@ -97,14 +97,83 @@ EOF
 
 Capture the discussion number and URL from output.
 
-If labels are needed, apply them after creation (Discussions API supports labels):
+After creation, fetch the discussion node ID via GraphQL (required for label attachment):
 ```bash
-gh api repos/OWNER/REPO/discussions/N/labels --method POST -f "labels[]=decision"
+gh api graphql -f query='
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    discussion(number: $number) { id }
+  }
+}' -f owner=OWNER -f repo=REPO -F number=N --jq '.data.repository.discussion.id'
 ```
 
-Note: Discussion label support depends on GitHub's API. If it fails, skip labels silently — they're informational, not critical.
+### 6. Resolve and Attach Labels
 
-### 6. Update Knowledge Manifest
+#### 6a. Fetch existing repo labels (name + node ID)
+
+```bash
+gh api graphql -f query='
+query($owner: String!, $repo: String!) {
+  repository(owner: $owner, name: $repo) {
+    labels(first: 100) { nodes { id name } }
+  }
+}' -f owner=OWNER -f repo=REPO --jq '.data.repository.labels.nodes'
+```
+
+#### 6b. Apply label mapping for the discussion type
+
+| Type | Auto-attach if exists | Suggest creating if not |
+|---|---|---|
+| `design` | `enhancement`, `architecture` | `design` (#0075ca) |
+| `decision` | `architecture` | `decision` (#e4e669) |
+| `retro` | — | `retro` (#f9d0c4) |
+| `postmortem` | — | `postmortem` (#b60205) |
+| `distribution` | — | `distribution` (#0e8a16) |
+| `analysis` | — | `analysis` (#5319e7) |
+
+For each label in the "Auto-attach if exists" column:
+- If it exists in the repo label list → collect its node ID for attachment
+- If it does not exist → skip silently (auto-attach only, no prompt)
+
+For each label in the "Suggest creating if not" column:
+- If it exists in the repo label list → collect its node ID for attachment
+- If it does not exist → propose creating it:
+  ```
+  Label "decision" (#e4e669) does not exist. Create it? (yes/no)
+  ```
+  If user confirms:
+  ```bash
+  gh label create "decision" --color "e4e669" --repo OWNER/REPO
+  ```
+  Then fetch the new label's node ID:
+  ```bash
+  gh api graphql -f query='
+  query($owner: String!, $repo: String!, $name: String!) {
+    repository(owner: $owner, name: $repo) {
+      label(name: $name) { id }
+    }
+  }' -f owner=OWNER -f repo=REPO -f name=LABEL_NAME --jq '.data.repository.label.id'
+  ```
+
+#### 6c. Attach labels to the discussion via GraphQL
+
+```bash
+gh api graphql -f query='
+mutation($discussionId: ID!, $labelIds: [ID!]!) {
+  addLabelsToLabelable(input: {
+    labelableId: $discussionId
+    labelIds: $labelIds
+  }) {
+    labelable {
+      labels(first: 10) { nodes { name } }
+    }
+  }
+}' -f discussionId=DISCUSSION_NODE_ID -f labelIds='["LABEL_NODE_ID_1","LABEL_NODE_ID_2"]'
+```
+
+If no label node IDs were collected (none exist and user declined all creation prompts), skip this step.
+
+### 8. Update Knowledge Manifest
 
 #### Read or create manifest
 
@@ -146,13 +215,14 @@ git add docs/github-planner/archive/
 git commit -m "docs: archive old knowledge manifest entries"
 ```
 
-### 7. Report
+### 9. Report
 
 Output:
 ```
 Discussion created: "Title" (#N)
 URL: https://github.com/OWNER/REPO/discussions/N
 Category: Decisions
+Labels: decision, architecture
 Related issues: #73
 
 Knowledge manifest updated: docs/github-planner/KNOWLEDGE.md
