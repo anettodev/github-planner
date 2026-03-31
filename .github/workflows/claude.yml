@@ -6,39 +6,24 @@ on:
   pull_request_review_comment:
     types: [created]
   issues:
-    types: [opened, labeled]
+    types: [opened, assigned]
   pull_request_review:
     types: [submitted]
-
-permissions: {}
 
 jobs:
   claude:
     if: |
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude') &&
-        contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association)
-      ) ||
-      (github.event_name == 'pull_request_review' &&
-        contains(github.event.review.body, '@claude') &&
-        contains(fromJson('["OWNER", "MEMBER"]'), github.event.review.author_association)
-      ) ||
-      (github.event_name == 'issue_comment' &&
-        contains(github.event.comment.body, '@claude') &&
-        contains(fromJson('["OWNER", "MEMBER"]'), github.event.comment.author_association)
-      ) ||
-      (github.event_name == 'issues' &&
-        (github.event.label.name == 'claude' ||
-        contains(github.event.issue.body, '@claude') ||
-        contains(github.event.issue.title, '@claude'))
-      )
-
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
+      pull-requests: read
+      issues: read
       id-token: write
-      actions: read
+      actions: read # Required for Claude to read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,58 +35,16 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read
-          prompt: |
-            **WHEN WORKING ON ISSUES:**
-            After implementing changes and committing, create a pull request:
-            ```
-            gh pr create --title "Your descriptive title" --body "## Summary
-            Your summary of what was implemented.
 
-            Closes #${{ github.event.issue.number }}"
-            ```
-            Always include a summary AND "Closes #${{ github.event.issue.number }}" in the body.
+          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
+          # prompt: 'Update the pull request description to include a summary of changes.'
 
-            **COMMIT RULES:**
-            - Do NOT add "Co-authored-by" lines to commits
-            - Do NOT add "Generated with Claude Code" or similar attributions
-            - Keep commits clean and professional
+          # Optional: Add claude_args to customize behavior and configuration
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # or https://code.claude.com/docs/en/cli-reference for available options
+          # claude_args: '--allowed-tools Bash(gh pr:*)'
 
-            **WHEN WORKING ON PR FEEDBACK:**
-            Make the requested changes and commit. Do NOT create a new PR.
-
-            **WHEN FIXING CI FAILURES:**
-            Fix the issues and commit. CI will re-run automatically.
-
-            **COMMIT MESSAGE RULES (max 72 chars):**
-            - Imperative mood: "Add" not "Added"
-            - Action verbs: Add, Update, Fix, Remove, Refactor, Implement
-            - No articles (a, an, the)
-            - No punctuation at end
-            - No prefixes like "feat:", "fix:"
-            - Single line only
-            - NO co-author attributions
-
-          track_progress: true
-          claude_args: |
-            --model "claude-sonnet-4-6"
-            --max-turns 50
-            --allowedTools "Bash(git:*),Bash(gh issue:*),Bash(gh pr:*),
-            Bash(gh repo:*),Edit,Write,Read,Glob,Grep,LS,WebSearch,WebFetch"
-
-      - name: Clean up Claude comment
-        if: github.event_name == 'issues'
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          COMMENT_ID=$(gh api \
-            repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
-            --jq '.[-1].id')
-          if [ -n "$COMMENT_ID" ]; then
-            BODY=$(gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID --jq '.body')
-            CLEANED=$(echo "$BODY" | sed 's/ • \[Create PR ➔\]([^)]*)//g' | sed 's/[[:space:]]*|[[:space:]]*$//')
-            gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
-              -X PATCH \
-              -f body="$CLEANED"
-          fi
